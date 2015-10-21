@@ -144,7 +144,9 @@ public class TestTCPService extends Service {
 
                         // 字符编码转换
                         try {
-                            strRecv = new String(bufRecv, "utf-8").trim();
+                            byte[] byteData = new byte[bufRecv.length - 4];
+                            System.arraycopy(bufRecv, 4, byteData, 0, bufRecv.length - 4);
+                            strRecv = new String(byteData, "utf-8").trim();
                         } catch (UnsupportedEncodingException e) {
                             e.printStackTrace();
                             continue;
