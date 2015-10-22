@@ -15,7 +15,7 @@ import android.view.MenuItem;
 
 public class MainActivity extends AppCompatActivity {
 
-    private Intent intent;
+    private Intent serviceIntent;
 
     private AlarmManager alarmManager;
 
@@ -37,10 +37,11 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        intent = new Intent(this, TestTCPService.class);
+        serviceIntent = new Intent(this, TestTCPService.class);
 
         alarmManager = (AlarmManager)getSystemService(Context.ALARM_SERVICE);
-        pi = PendingIntent.getService(this, 0, intent, 0);
+//        pi = PendingIntent.getService(this, 0, serviceIntent, 0);
+        pi = PendingIntent.getBroadcast(this, 0, new Intent(TestTCPReceiver.ACTION_POLL), 0);
     }
 
     @Override
@@ -66,12 +67,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void startTCPService(View v) {
-        startService(intent);
-//        alarmManager.setRepeating(AlarmManager.ELAPSED_REALTIME, 30000, 30000, pi);
+        startService(serviceIntent);
+        alarmManager.setRepeating(AlarmManager.ELAPSED_REALTIME, 30000, 30000, pi);
     }
 
     public void stopTCPService(View v) {
-//        alarmManager.cancel(pi);
-        stopService(intent);
+        alarmManager.cancel(pi);
+        stopService(serviceIntent);
     }
 }

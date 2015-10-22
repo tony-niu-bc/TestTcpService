@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
 import android.os.IBinder;
@@ -30,17 +31,23 @@ public class TestTCPService extends Service {
     private boolean bIsRunning = true; // true - running, false - exit
 
     private Socket clientSocket = null;
+
     // Android 中创建 (先)ObjectOutputStream、(后)ObjectInputStream 有先后
     private OutputStream outStream = null;
     private InputStream inStream = null;
-
-    private byte[] bufRecv = new byte[128];
-    private String strRecv = null;
 
     private FileWriter fileWriter;
     private BufferedWriter bufWriter;
 
     private SimpleDateFormat sdfLogTime;
+
+    public class TestBinder extends Binder
+    {
+        public TestTCPService getService()
+        {
+            return TestTCPService.this;
+        }
+    }
 
     public TestTCPService() {
     }
@@ -51,172 +58,211 @@ public class TestTCPService extends Service {
         return ((info != null) && info.isAvailable());
     }
 
+    private boolean initService(){
+        boolean bIsSuccess = false;
+
+        do {
+            // 实例化对象并连接到服务器
+            try {
+                clientSocket = new Socket("10.1.200.16", 8080);
+            }
+            catch (UnknownHostException e) {
+                e.printStackTrace();
+                break;
+            }
+            catch (IOException e) {
+                e.printStackTrace();
+                break;
+            }
+
+            // 获得Socket的输出流
+            try {
+                outStream = clientSocket.getOutputStream();
+            } catch (IOException e) {
+                e.printStackTrace();
+                break;
+            }
+
+            // 获得输入流
+            try {
+                inStream = clientSocket.getInputStream();
+            } catch (IOException e) {
+                e.printStackTrace();
+                break;
+            }
+
+            try {
+                fileWriter = new FileWriter(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) +
+                                            File.separator + "TestTCPService.txt", true); // 追加不进行覆盖
+            } catch (IOException e) {
+                e.printStackTrace();
+                break;
+            }
+
+            bufWriter = new BufferedWriter(fileWriter);
+
+            sdfLogTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"); // 日志输出的时间格式
+
+            bIsSuccess = true;
+
+        } while (false);
+
+        return bIsSuccess;
+    }
+
+    private void uninitService() {
+        try {
+            if (null != inStream) {
+                inStream.close();
+                inStream = null;
+            }
+
+            if (null != outStream) {
+                outStream.close();
+                outStream = null;
+            }
+
+            if (null != clientSocket) {
+                clientSocket.close();
+                clientSocket = null;
+            }
+
+            if (null != bufWriter) {
+                bufWriter.close();
+                bufWriter = null;
+            }
+
+            if (null != fileWriter) {
+                fileWriter.close();
+                fileWriter = null;
+            }
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public boolean dataSendRecv() {
+        boolean bIsSuccess = false;
+
+        byte[] bufRecv = new byte[128];
+        String strRecv = null;
+
+        do {
+            if ((null == outStream)
+              ||(null == inStream)
+              ||(null == bufWriter)) {
+                break;
+            }
+
+            Date timeNow = new Date();
+            String strNow = sdfLogTime.format(timeNow);
+            String needWriteMessage = strNow + " " + "NetworkState: " + checkNetWorkState();
+
+            Log.i("TestTCPService", "NetworkState: " + checkNetWorkState());
+
+            try {
+                bufWriter.write(needWriteMessage);
+                bufWriter.newLine();
+            } catch (IOException e) {
+                e.printStackTrace();
+                break;
+            }
+
+            // 发送数据
+            try {
+                byte[] byteSend = new byte[]{0x00, 0x00, 0x00, 0x04, 65, 66, 67, 68};
+                outStream.write(byteSend);
+            } catch (IOException e) {
+                e.printStackTrace();
+                break;
+            }
+
+            // 读取输入数据（阻塞）
+            try {
+                inStream.read(bufRecv);
+            } catch (IOException e) {
+                e.printStackTrace();
+                continue;
+            }
+
+            // 字符编码转换
+            try {
+                byte[] byteData = new byte[bufRecv.length - 4];
+                System.arraycopy(bufRecv, 4, byteData, 0, bufRecv.length - 4);
+                strRecv = new String(byteData, "utf-8").trim();
+            } catch (UnsupportedEncodingException e) {
+                e.printStackTrace();
+                break;
+            }
+
+            Log.i("TestTCPService", "From server: " + strRecv);
+
+            timeNow = new Date();
+            strNow = sdfLogTime.format(timeNow);
+            needWriteMessage = strNow + " " + strRecv;
+
+            try {
+                bufWriter.write(needWriteMessage);
+                bufWriter.newLine();
+            } catch (IOException e) {
+                e.printStackTrace();
+                break;
+            }
+
+            bIsSuccess = true;
+
+        } while(false);
+
+        return bIsSuccess;
+    }
+
     @Override
     public void onCreate() {
         Log.i("TestTCPService",
-                "TestTCPService - onCreate - ProcessID - TID: " + Thread.currentThread().getId() +
-                        " PID: " + Process.myPid() +
-                        " TID: " + Process.myTid() +
-                        " UID: " + Process.myUid());
-
-        // Android 3.0 以上可用代码
-        Intent intent = new Intent(this, MainActivity.class);
-        PendingIntent pi = PendingIntent.getActivity(this, 1, intent, 0);
-        RemoteViews rv = new RemoteViews(this.getPackageName(), R.layout.my_status_window);
-
-        Notification.Builder nb = new Notification.Builder(this);
-        nb.setSmallIcon(R.mipmap.ic_launcher)
-          .setOngoing(true)
-          .setContent(rv)
-          .setContentIntent(pi);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-            startForeground(1, nb.build());
-        }
-        else {
-            startForeground(1, nb.getNotification());
-        }
+              "TestTCPService - onCreate - ProcessID - TID: " + Thread.currentThread().getId() +
+              " PID: " + Process.myPid() +
+              " TID: " + Process.myTid() +
+              " UID: " + Process.myUid());
 
         new Thread(new Runnable() {
             @Override
-            public void run()
-            {
+            public void run() {
                 do {
-                    // 实例化对象并连接到服务器
-                    try {
-                        clientSocket = new Socket("10.1.200.16", 8080);
-                    }
-                    catch (UnknownHostException e) {
-                        e.printStackTrace();
-                        break;
-                    }
-                    catch (IOException e) {
-                        e.printStackTrace();
+                    if (!initService()) {
+                        stopSelf();
                         break;
                     }
 
-                    // 获得Socket的输出流
-                    try {
-                        outStream = clientSocket.getOutputStream();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        break;
-                    }
-
-                    // 获得输入流
-                    try {
-                        inStream = clientSocket.getInputStream();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        break;
-                    }
-
-                    try {
-                        fileWriter = new FileWriter(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) +
-                                                    File.separator + "TestTCPService.txt", true); // 追加不进行覆盖
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        break;
-                    }
-
-                    bufWriter = new BufferedWriter(fileWriter);
-
-                    sdfLogTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"); // 日志输出的时间格式
-
-                    while (bIsRunning)
-                    {
-                        // 发送数据
-                        try {
-                            byte[] byteSend = new byte[]{0x00, 0x00, 0x00, 0x04, 65, 66, 67, 68};
-                            outStream.write(byteSend);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                            continue;
-                        }
-
-                        // 读取输入数据（阻塞）
-                        try {
-                            inStream.read(bufRecv);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                            continue;
-                        }
-
-                        // 字符编码转换
-                        try {
-                            byte[] byteData = new byte[bufRecv.length - 4];
-                            System.arraycopy(bufRecv, 4, byteData, 0, bufRecv.length - 4);
-                            strRecv = new String(byteData, "utf-8").trim();
-                        } catch (UnsupportedEncodingException e) {
-                            e.printStackTrace();
-                            continue;
-                        }
-
-                        Log.i("TestTCPService", "From server: " + strRecv);
-
+                    if (null != bufWriter) {
                         Date timeNow = new Date();
                         String strNow = sdfLogTime.format(timeNow);
-                        String needWriteMessage = strNow + " " + strRecv + "(" + "NetworkState: " + checkNetWorkState() + ")";
+                        String needWriteMessage = strNow + "onCreate" + " ProcessID =" + Thread.currentThread().getId() + " PID =" + Process.myPid() + "(" + "NetworkState: " + checkNetWorkState() + ")";
 
                         try {
                             bufWriter.write(needWriteMessage);
                             bufWriter.newLine();
                         } catch (IOException e) {
                             e.printStackTrace();
-                            continue;
-                        }
-
-                        try
-                        {
-                            Thread.sleep(1000);
-                        }
-                        catch (InterruptedException e)
-                        {
-                            e.printStackTrace();
                         }
                     }
+
+                    while (bIsRunning) {
+                        synchronized (TestTCPService.this) {
+                            try {
+                                TestTCPService.this.wait();
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                                continue;
+                            }
+
+                            dataSendRecv();
+                        }
+                    }
+
+                    uninitService();
+
                 } while (false);
-
-                Log.i("TestTCPService", "Jump out while loop of thread!");
-                Date timeNow = new Date();
-                String strNow = sdfLogTime.format(timeNow);
-                String needWriteMessage = strNow + "Jump out while loop of thread!" + "(" + "NetworkState: " + checkNetWorkState() + ")";
-
-                try {
-                    bufWriter.write(needWriteMessage);
-                    bufWriter.newLine();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-                try {
-                    if (null != inStream) {
-                        inStream.close();
-                        inStream = null;
-                    }
-
-                    if (null != outStream) {
-                        outStream.close();
-                        outStream = null;
-                    }
-
-                    if (null != clientSocket) {
-                        clientSocket.close();
-                        clientSocket = null;
-                    }
-
-                    if (null != bufWriter) {
-                        bufWriter.close();
-                        bufWriter = null;
-                    }
-
-                    if (null != fileWriter) {
-                        fileWriter.close();
-                        fileWriter = null;
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
             }
         }).start();
 
@@ -226,7 +272,7 @@ public class TestTCPService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.i("TestTCPService",
-              "TestTCPService - onStartCommand -" + " intent = " + intent + " flags =" + flags + " startId =" + startId );
+                "TestTCPService - onStartCommand -" + " intent = " + intent + " flags =" + flags + " startId =" + startId);
 
         if (null != bufWriter) {
             Date timeNow = new Date();
@@ -239,6 +285,10 @@ public class TestTCPService extends Service {
             } catch (IOException e) {
                 e.printStackTrace();
             }
+
+            synchronized (this) {
+                this.notify();
+            }
         }
 
         return super.onStartCommand(intent, flags, startId);
@@ -246,8 +296,27 @@ public class TestTCPService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
-        // TODO: Return the communication channel to the service.
-        throw new UnsupportedOperationException("Not yet implemented");
+        Log.i("todolist",
+              "TestService - onBind - intent: " + intent +
+              " ProcessID - TID: " + Thread.currentThread().getId() +
+              " PID: " + Process.myPid() +
+              " TID: " + Process.myTid() +
+              " UID: " + Process.myUid());
+
+        if (null != bufWriter) {
+            Date timeNow = new Date();
+            String strNow = sdfLogTime.format(timeNow);
+            String needWriteMessage = strNow + "onBind" + "(" + "NetworkState: " + checkNetWorkState() + ")";
+
+            try {
+                bufWriter.write(needWriteMessage);
+                bufWriter.newLine();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+		return new TestBinder();
     }
 
     @Override
@@ -255,8 +324,6 @@ public class TestTCPService extends Service {
         Log.i("TestTCPService", "TestTCPService - onDestroy");
 
         bIsRunning = false;
-
-        stopForeground(true);
 
         super.onDestroy();
     }
