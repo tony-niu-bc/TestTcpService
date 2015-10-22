@@ -11,6 +11,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
 import android.os.IBinder;
+import android.os.PowerManager;
 import android.util.Log;
 import android.os.Process;
 import android.widget.RemoteViews;
@@ -40,6 +41,9 @@ public class TestTCPService extends Service {
     private BufferedWriter bufWriter;
 
     private SimpleDateFormat sdfLogTime;
+
+    PowerManager pm;
+    PowerManager.WakeLock wakeLock;
 
     public class TestBinder extends Binder
     {
@@ -219,6 +223,9 @@ public class TestTCPService extends Service {
 
     @Override
     public void onCreate() {
+        pm = (PowerManager)getSystemService(Context.POWER_SERVICE);
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pollWakeLock");
+
         Log.i("TestTCPService",
               "TestTCPService - onCreate - ProcessID - TID: " + Thread.currentThread().getId() +
               " PID: " + Process.myPid() +
@@ -257,6 +264,8 @@ public class TestTCPService extends Service {
                             }
 
                             dataSendRecv();
+
+                            wakeLock.release();
                         }
                     }
 
@@ -271,6 +280,8 @@ public class TestTCPService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        wakeLock.acquire();
+
         Log.i("TestTCPService",
                 "TestTCPService - onStartCommand -" + " intent = " + intent + " flags =" + flags + " startId =" + startId);
 
