@@ -66,12 +66,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void startTCPService(View v) {
-//        startService(intent);
-        alarmManager.setRepeating(AlarmManager.ELAPSED_REALTIME, 30000, 30000, pi);
+        startService(intent);
+//        alarmManager.setRepeating(AlarmManager.ELAPSED_REALTIME, 30000, 30000, pi);
     }
 
     public void stopTCPService(View v) {
-        alarmManager.cancel(pi);
+//        alarmManager.cancel(pi);
         stopService(intent);
     }
 }

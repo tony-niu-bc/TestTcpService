@@ -28,6 +28,7 @@
             android:name="example.com.demo.TestTCPService"
             android:enabled="true"
             android:exported="true"
+            android:process=":lagou"
             />
     </application>
 </manifest>
